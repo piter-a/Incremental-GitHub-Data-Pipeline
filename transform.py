@@ -6,12 +6,25 @@ import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 from config import RAW_DIR, CLEAN_DIR, ISSUES_DIR
+from utils.guid_gen import (
+    generate_guid,
+    NAMESPACE_REPO,
+    NAMESPACE_BRANCH,
+    NAMESPACE_ISSUE,
+    NAMESPACE_OWNER
+)
 
 class CleanData:
     def __init__(self):
         self.repos_df = pd.DataFrame()
         self.issues_df = pd.DataFrame()
         self.branches_df = pd.DataFrame()
+        self.owners_df = pd.DataFrame(
+            columns = [
+                'owner_id',
+                'owner_login'
+            ]
+        )
 
     def _log_issue(self, message):
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -59,8 +72,8 @@ class CleanData:
         
         return data
     
-    def clean_data(self, file_name):
-        raw_data = self._validate_raw_file(file_name)
+    def clean_repos(self):
+        raw_data = self._validate_raw_file('repos_raw')
         self.repos_df = pd.json_normalize(raw_data)
 
         self.repos_df = self.repos_df[[
@@ -94,9 +107,9 @@ class CleanData:
 
         self.repos_df = self.repos_df.rename(
             columns = {
-                'id' : 'repo_id',
+                'id' : 'github_repo_id',
                 'name' : 'repo_name',
-                'owner.id' : 'owner_id',
+                'owner.id' : 'github_owner_id',
                 'owner.login' : 'owner_login',  
             }
         )
@@ -105,28 +118,36 @@ class CleanData:
 
         self.repos_df = self.repos_df.dropna(
             subset = [
-                'repo_id',
-                'owner_id',
+                'github_repo_id',
+                'github_owner_id',
                 'owner_login'
             ]
         )
 
-        # Dedupe on repo id, keep latest one if more than one exist
+        # Dedupe on repo_id, keep latest one if more than one exist
 
         self.repos_df = self.repos_df.drop_duplicates(
-            subset = ['repo_id'],
+            subset = ['github_repo_id'],
             keep = 'last'
         )
 
         # Generate GUIDs for repo_id
 
-        self.repos_df['repo_id'] = [
-            str(uuid.uuid4()) for _ in range(len(self.repos_df))
-        ]
+        self.repos_df['repo_id'] = self.repos_df.apply(
+            lambda r: generate_guid(
+                NAMESPACE_REPO,
+                f"{r['owner_login']}|{r['repo_name']}"
+            ),
+            axis = 1
+        )
 
-        self.repos_df['owner_id'] = [
-            str(uuid.uuid4()) for _ in range(len(self.repos_df))
-        ]
+        self.repos_df['owner_id'] = self.repos_df.apply(
+            lambda r: generate_guid(
+                NAMESPACE_OWNER,
+                r['owner_login']
+            ),
+            axis = 1
+        )
 
         # Data type casting
 
@@ -135,15 +156,10 @@ class CleanData:
             'repo_name': 'string',
             'full_name': 'string',
             'description': 'string',
-            'topics': 'string',
             'language': 'string',
             'owner_id': 'string',
             'owner_login': 'string',
             'visibility': 'string',
-            'private': 'boolean',
-            'disabled': 'boolean',
-            'fork': 'boolean',
-            'archived': 'boolean',
             'default_branch': 'string',
             'stargazers_count': 'int64',
             'watchers': 'int64',
@@ -153,6 +169,10 @@ class CleanData:
             'open_issues_count': 'int64',
         })
 
+        self.repos_df['topics'] = self.repos_df['topics'].apply(
+            lambda x: ','.join(x) if isinstance(x, list) else None
+        )
+
         date_cols = ['created_at', 'updated_at', 'pushed_at']
         
         for col in date_cols:
@@ -160,11 +180,32 @@ class CleanData:
                 self.repos_df[col], 
                 errors='coerce', 
                 utc=True)
+            
+        bool_cols = ['private', 'disabled', 'fork', 'archived']
 
-        self._write_to_file(file_name, self.repos_df)
+        for col in bool_cols:
+            self.repos_df[col] = self.repos_df[col].astype('Int64')
+
+        new_owners = self.repos_df[['owner_id', 'owner_login']]
+
+        self.owners_df = pd.concat(
+            [self.owners_df, new_owners],
+            ignore_index = True
+        )
+
+        self._write_to_file('repos_clean', self.repos_df)
+
+    def clean_owners(self):
+        self.owners_df = (
+            self.owners_df
+            .dropna(subset = ['owner_id', 'owner_login'])
+            .drop_duplicates(subset = ['owner_id'])
+            .reset_index(drop = True)
+        )
+        
+        self._write_to_file('owners_clean', self.owners_df)
 
 
 data_cleaner = CleanData()
-file_name = 'test'
-data = data_cleaner.clean_data('repos_raw')
-print(data)
+data_cleaner.clean_repos()
+data_cleaner.clean_owners()
