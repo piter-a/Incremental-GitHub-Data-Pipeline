@@ -246,7 +246,7 @@ class CleanData:
         self.issues_df['issue_id'] = self.issues_df.apply(
             lambda r: generate_guid(
                 NAMESPACE_ISSUE,
-                f"{r['author_login']}|{r['title']}"
+                f"{r['repo_name']}|{r['number']}"
             ),
             axis = 1
         )
@@ -278,7 +278,92 @@ class CleanData:
             columns = ['repo_name']
         )
 
+        self.issues_df = self.issues_df.astype({
+            'issue_id' : 'string',
+            'github_issue_id' : 'Int64',
+            'repo_id' : 'string',
+            'author_id' : 'string',
+            'assignee_id' : 'string',
+            'author_login' : 'string',
+            'assignee_login' : 'string',
+            'number' : 'Int64',
+            'title' : 'string',
+            'state' : 'string',
+            'comments' : 'Int64',
+        })
+
+        date_cols = ['created_at', 'updated_at', 'closed_at', 'pr_merged_at']
+
+        for col in date_cols:
+            self.issues_df[col] = pd.to_datetime(
+                self.issues_df[col],
+                errors = 'coerce',
+                utc = True
+            )
+
+        self.issues_df['locked'] = self.issues_df['locked'].astype('Int64')
+
+        self.issues_df['labels'] = self.issues_df['labels'].apply(
+            lambda labels: ','.join(
+                label['name'] for label in labels
+            ) if isinstance(labels, list) and labels else None
+        )
+
         self._write_to_file('issues_clean', self.issues_df)
+
+    def clean_branches(self):
+        raw_data = self._validate_raw_file('branches_raw')
+        self.branches_df = pd.json_normalize(raw_data)
+
+        self.branches_df = self.branches_df[[
+            'name',
+            'protected',
+            'repo_name',
+            'commit.sha'
+        ]]
+
+        self.branches_df = self.branches_df.rename(
+            columns = {'commit.sha' : 'commit_sha'}
+        )
+
+        self.branches_df = self.branches_df.dropna(
+            subset = ['name']
+        )
+
+        self.branches_df = self.branches_df.drop_duplicates(
+            subset = ['repo_name', 'name'],
+            keep = 'last'
+        )
+
+        self.branches_df['branch_id'] = self.branches_df.apply(
+            lambda r: generate_guid(
+                NAMESPACE_BRANCH,
+                f"{r['repo_name']}|{r['name']}"
+            ),
+            axis = 1
+        )
+
+        self.branches_df = self.branches_df.merge(
+            self.repos_df[['repo_id', 'repo_name']],
+            on = 'repo_name',
+            how = 'left',
+            validate = 'many_to_one'
+        )
+
+        self.branches_df = self.branches_df.drop(
+            columns = ['repo_name']
+        )
+
+        self.branches_df = self.branches_df.astype({
+            'branch_id' : 'string',
+            'repo_id' : 'string',
+            'protected' : 'Int64',
+            'commit_sha' : 'string'
+        })
+
+        self.branches_df['ingested_at'] = pd.Timestamp.utcnow()
+
+        self._write_to_file('branches_clean', self.branches_df)
 
     def clean_users(self):
         new_authors = self.issues_df[['author_id', 'author_login']].rename(
@@ -311,9 +396,14 @@ class CleanData:
             ignore_index = True
         )
 
-        self.users_df.drop_duplicates(
+        self.users_df = self.users_df.drop_duplicates(
             subset = ['user_id']
         )
+
+        self.users_df = self.users_df.astype({
+            'user_id' : 'string',
+            'user_id' : 'string'
+        })
 
         self._write_to_file('users_clean', self.users_df)
 
@@ -335,8 +425,9 @@ class CleanData:
         self._write_to_file('owners_clean', self.owners_df)
 
 
-# data_cleaner = CleanData()
-# data_cleaner.clean_repos()
-# data_cleaner.clean_owners()
-# data_cleaner.clean_issues()
-# data_cleaner.clean_users()
+data_cleaner = CleanData()
+data_cleaner.clean_repos()
+data_cleaner.clean_owners()
+data_cleaner.clean_branches()
+data_cleaner.clean_issues()
+data_cleaner.clean_users()
