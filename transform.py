@@ -11,7 +11,8 @@ from utils.guid_gen import (
     NAMESPACE_REPO,
     NAMESPACE_BRANCH,
     NAMESPACE_ISSUE,
-    NAMESPACE_OWNER
+    NAMESPACE_OWNER,
+    NAMESPACE_USER
 )
 
 class CleanData:
@@ -23,6 +24,12 @@ class CleanData:
             columns = [
                 'owner_id',
                 'owner_login'
+            ]
+        )
+        self.users_df = pd.DataFrame(
+            columns = [
+                'user_id',
+                'user_login'
             ]
         )
 
@@ -186,6 +193,131 @@ class CleanData:
         for col in bool_cols:
             self.repos_df[col] = self.repos_df[col].astype('Int64')
 
+        self._write_to_file('repos_clean', self.repos_df)
+
+    def clean_issues(self):
+        raw_data = self._validate_raw_file('issues_raw')
+        self.issues_df = pd.json_normalize(raw_data)
+
+        self.issues_df = self.issues_df[[
+            'id',
+            'repo_name',
+            'number',
+            'user.login',
+            'user.id',
+            'title',
+            'state',
+            'locked',
+            'comments',
+            'pull_request.merged_at',
+            'created_at',
+            'updated_at',
+            'closed_at',
+            'labels',
+            'assignee.login',
+            'assignee.id'
+        ]]
+
+        self.issues_df = self.issues_df.rename(
+            columns = {
+                'id' : 'github_issue_id',
+                'user.login' : 'author_login',
+                'user.id' : 'github_author_id',
+                'pull_request.merged_at' : 'pr_merged_at',
+                'assignee.login' : 'assignee_login',
+                'assignee.id' : 'assignee_id'
+            }
+        )
+
+        self.issues_df = self.issues_df.dropna(
+            subset = [
+                'github_issue_id',
+                'repo_name',
+                'author_login',
+                'github_author_id'
+            ]
+        )
+
+        self.issues_df = self.issues_df.drop_duplicates(
+            subset = ['github_issue_id'],
+            keep = 'last'
+        )
+
+        self.issues_df['issue_id'] = self.issues_df.apply(
+            lambda r: generate_guid(
+                NAMESPACE_ISSUE,
+                f"{r['author_login']}|{r['title']}"
+            ),
+            axis = 1
+        )
+
+        self.issues_df['author_id'] = self.issues_df.apply(
+            lambda r: generate_guid(
+                NAMESPACE_USER,
+                r['author_login']
+            ),
+            axis = 1
+        )
+
+        self.issues_df['assignee_id'] = self.issues_df.apply(
+            lambda r: generate_guid(
+                NAMESPACE_USER,
+                r['assignee_login']
+            ) if pd.notna(r['assignee_login']) else None,
+            axis = 1
+        )
+
+        self.issues_df = self.issues_df.merge(
+            self.repos_df[['repo_id', 'repo_name']],
+            on = 'repo_name',
+            how = 'left',
+            validate = 'many_to_one'
+        )
+
+        self.issues_df = self.issues_df.drop(
+            columns = ['repo_name']
+        )
+
+        self._write_to_file('issues_clean', self.issues_df)
+
+    def clean_users(self):
+        new_authors = self.issues_df[['author_id', 'author_login']].rename(
+            columns = {
+                'author_id' : 'user_id',
+                'author_login' : 'user_login'
+            }
+        )
+
+        new_assignees = self.issues_df[['assignee_id', 'assignee_login']].rename(
+            columns = {
+                'assignee_id' : 'user_id',
+                'assignee_login' : 'user_login'
+            }
+        )
+
+        new_users = pd.concat(
+            [new_authors, new_assignees],
+            ignore_index = True
+        )
+
+        new_users = (
+            new_users
+            .drop_duplicates(subset = ['user_id'])
+            .dropna(subset = ['user_id', 'user_login'])
+        )
+
+        self.users_df = pd.concat(
+            [self.users_df, new_users],
+            ignore_index = True
+        )
+
+        self.users_df.drop_duplicates(
+            subset = ['user_id']
+        )
+
+        self._write_to_file('users_clean', self.users_df)
+
+    def clean_owners(self):
         new_owners = self.repos_df[['owner_id', 'owner_login']]
 
         self.owners_df = pd.concat(
@@ -193,9 +325,6 @@ class CleanData:
             ignore_index = True
         )
 
-        self._write_to_file('repos_clean', self.repos_df)
-
-    def clean_owners(self):
         self.owners_df = (
             self.owners_df
             .dropna(subset = ['owner_id', 'owner_login'])
@@ -206,6 +335,8 @@ class CleanData:
         self._write_to_file('owners_clean', self.owners_df)
 
 
-data_cleaner = CleanData()
-data_cleaner.clean_repos()
-data_cleaner.clean_owners()
+# data_cleaner = CleanData()
+# data_cleaner.clean_repos()
+# data_cleaner.clean_owners()
+# data_cleaner.clean_issues()
+# data_cleaner.clean_users()

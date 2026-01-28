@@ -161,8 +161,8 @@ class ExtractData:
 
         self._write_to_file('branches_raw', all_branches)
         
-extractor = ExtractData()
-repo_names = extractor.fetch_repos()
+# extractor = ExtractData()
+# repo_names = extractor.fetch_repos()
 # extractor.fetch_issues(repo_names)
 # extractor.fetch_branches(repo_names)
 # print(len(repo_names))
