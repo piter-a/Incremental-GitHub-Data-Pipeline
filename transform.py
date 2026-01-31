@@ -121,6 +121,8 @@ class CleanData:
             }
         )
 
+        og_rows = len(self.repos_df)
+
         # Drop nulls
 
         self.repos_df = self.repos_df.dropna(
@@ -137,6 +139,11 @@ class CleanData:
             subset = ['github_repo_id'],
             keep = 'last'
         )
+
+        new_rows = len(self.repos_df)
+
+        if og_rows != new_rows:
+            self._log_issues(f'REPOS | {og_rows - new_rows} dropped during cleaning.')
 
         # Generate GUIDs for repo_id
 
@@ -194,6 +201,7 @@ class CleanData:
             self.repos_df[col] = self.repos_df[col].astype('Int64')
 
         self._write_to_file('repos_clean', self.repos_df)
+        self._log_issue(f'REPOS - Complete | {len(self.repos_df)} rows loaded.')
 
     def clean_issues(self):
         raw_data = self._validate_raw_file('issues_raw')
@@ -229,6 +237,8 @@ class CleanData:
             }
         )
 
+        og_rows = len(self.issues_df)
+
         self.issues_df = self.issues_df.dropna(
             subset = [
                 'github_issue_id',
@@ -242,6 +252,11 @@ class CleanData:
             subset = ['github_issue_id'],
             keep = 'last'
         )
+
+        new_rows = len(self.issues_df)
+
+        if og_rows != new_rows:
+            self._log_issues(f'ISSUES | {og_rows - new_rows} dropped during cleaning.')
 
         self.issues_df['issue_id'] = self.issues_df.apply(
             lambda r: generate_guid(
@@ -278,6 +293,15 @@ class CleanData:
             columns = ['repo_name']
         )
 
+        missing_repos = self.issues_df['repo_id'].isna().sum()
+
+        if missing_repos > 0:
+            self._log_issue(f'ISSUES | {missing_repos} rows with missing repo_id (FK Enforcement).')
+
+        self.issues_df = self.issues_df.dropna(
+            subset = ['repo_id']
+        )
+
         self.issues_df = self.issues_df.astype({
             'issue_id' : 'string',
             'github_issue_id' : 'Int64',
@@ -310,6 +334,7 @@ class CleanData:
         )
 
         self._write_to_file('issues_clean', self.issues_df)
+        self._log_issue(f'ISSUES - Complete | {len(self.issues_df)} rows loaded.')
 
     def clean_branches(self):
         raw_data = self._validate_raw_file('branches_raw')
@@ -326,6 +351,8 @@ class CleanData:
             columns = {'commit.sha' : 'commit_sha'}
         )
 
+        og_rows = len(self.branches_df)
+
         self.branches_df = self.branches_df.dropna(
             subset = ['name']
         )
@@ -334,6 +361,11 @@ class CleanData:
             subset = ['repo_name', 'name'],
             keep = 'last'
         )
+
+        new_rows = len(self.branches_df)
+
+        if og_rows != new_rows:
+            self._log_issues(f'BRANCHES | {og_rows - new_rows} dropped during cleaning.')
 
         self.branches_df['branch_id'] = self.branches_df.apply(
             lambda r: generate_guid(
@@ -364,6 +396,7 @@ class CleanData:
         self.branches_df['ingested_at'] = pd.Timestamp.utcnow()
 
         self._write_to_file('branches_clean', self.branches_df)
+        self._log_issue(f'BRANCHES - Complete | {len(self.branches_df)} rows loaded.')
 
     def clean_users(self):
         new_authors = self.issues_df[['author_id', 'author_login']].rename(
@@ -396,9 +429,16 @@ class CleanData:
             ignore_index = True
         )
 
+        og_rows = len(self.users_df)
+
         self.users_df = self.users_df.drop_duplicates(
             subset = ['user_id']
         )
+
+        new_rows = len(self.users_df)
+
+        if og_rows != new_rows:
+            self._log_issues(f'USERS | {og_rows - new_rows} dropped during cleaning.')
 
         self.users_df = self.users_df.astype({
             'user_id' : 'string',
@@ -406,6 +446,7 @@ class CleanData:
         })
 
         self._write_to_file('users_clean', self.users_df)
+        self._log_issue(f'USERS - Complete | {len(self.users_df)} rows loaded.')
 
     def clean_owners(self):
         new_owners = self.repos_df[['owner_id', 'owner_login']]
@@ -415,6 +456,8 @@ class CleanData:
             ignore_index = True
         )
 
+        og_rows = len(self.owners_df)
+
         self.owners_df = (
             self.owners_df
             .dropna(subset = ['owner_id', 'owner_login'])
@@ -422,7 +465,13 @@ class CleanData:
             .reset_index(drop = True)
         )
         
+        new_rows = len(self.owners_df)
+
+        if og_rows != new_rows:
+            self._log_issue(f'OWNERS | {og_rows - new_rows} dropped during cleaning.')
+
         self._write_to_file('owners_clean', self.owners_df)
+        self._log_issue(f'OWNERS - Complete | {len(self.owners_df)} rows loaded.')
 
 
 data_cleaner = CleanData()
