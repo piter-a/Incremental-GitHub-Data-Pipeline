@@ -2,7 +2,6 @@ import pandas as pd
 import json
 import os
 import datetime
-import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 from config import RAW_DIR, CLEAN_DIR, ISSUES_DIR
