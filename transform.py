@@ -199,6 +199,15 @@ class CleanData:
         for col in bool_cols:
             self.repos_df[col] = self.repos_df[col].astype('Int64')
 
+        self.repos_df = self.repos_df[[
+            'repo_id', 'github_repo_id', 'repo_name','full_name', 
+            'description', 'topics', 'language', 'owner_id', 'github_owner_id',
+            'owner_login', 'visibility', 'private', 'disabled', 'fork', 'archived',
+            'default_branch', 'language', 'stargazers_count', 'watchers',
+            'watchers_count', 'forks_count', 'forks', 'open_issues_count',
+            'created_at', 'updated_at', 'pushed_at'
+            ]]
+
         self._write_to_file('repos_clean', self.repos_df)
         self._log_issue(f'REPOS - Complete | {len(self.repos_df)} rows loaded.')
 
@@ -332,6 +341,12 @@ class CleanData:
             ) if isinstance(labels, list) and labels else None
         )
 
+        self.issues_df = self.issues_df[[
+            'issue_id', 'github_issue_id', 'number', 'author_id', 'github_author_id',
+            'author_login', 'title', 'state', 'locked', 'comments', 'pr_merged_at', 'created_at',
+            'updated_at', 'closed_at', 'labels', 'assignee_id', 'assignee_login', 'repo_id'
+        ]]
+
         self._write_to_file('issues_clean', self.issues_df)
         self._log_issue(f'ISSUES - Complete | {len(self.issues_df)} rows loaded.')
 
@@ -393,6 +408,8 @@ class CleanData:
         })
 
         self.branches_df['ingested_at'] = pd.Timestamp.utcnow()
+
+        self.branches_df = self.branches_df[['branch_id', 'name', 'protected', 'commit_sha', 'repo_id', 'ingested_at']]
 
         self._write_to_file('branches_clean', self.branches_df)
         self._log_issue(f'BRANCHES - Complete | {len(self.branches_df)} rows loaded.')

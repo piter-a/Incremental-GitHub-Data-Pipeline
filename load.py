@@ -54,5 +54,7 @@ class LoadData:
             self._log_issue(f'Failed to connect to the database: {e}')
             raise ConnectionError('Failed to connect to SQL Server!') from e
         
+    # remember to clean up the githubIDs from the clean datasets, these can be dropped as not needed in the database
+        
 loader = LoadData()
 loader.connect_db()
