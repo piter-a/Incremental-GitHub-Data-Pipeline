@@ -97,9 +97,7 @@ class CleanData:
             'fork',
             'archived',
             'default_branch',
-            'language',
             'stargazers_count',
-            'watchers',
             'watchers_count',
             'forks_count',
             'forks',
@@ -175,7 +173,6 @@ class CleanData:
             'visibility': 'string',
             'default_branch': 'string',
             'stargazers_count': 'int64',
-            'watchers': 'int64',
             'watchers_count': 'int64',
             'forks': 'int64',
             'forks_count': 'int64',
@@ -203,7 +200,7 @@ class CleanData:
             'repo_id', 'github_repo_id', 'repo_name','full_name', 
             'description', 'topics', 'language', 'owner_id', 'github_owner_id',
             'owner_login', 'visibility', 'private', 'disabled', 'fork', 'archived',
-            'default_branch', 'language', 'stargazers_count', 'watchers',
+            'default_branch', 'stargazers_count',
             'watchers_count', 'forks_count', 'forks', 'open_issues_count',
             'created_at', 'updated_at', 'pushed_at'
             ]]
@@ -362,17 +359,19 @@ class CleanData:
         ]]
 
         self.branches_df = self.branches_df.rename(
-            columns = {'commit.sha' : 'commit_sha'}
+            columns = {
+                'name' : 'branch_name',
+                'commit.sha' : 'commit_sha'}
         )
 
         og_rows = len(self.branches_df)
 
         self.branches_df = self.branches_df.dropna(
-            subset = ['name']
+            subset = ['branch_name']
         )
 
         self.branches_df = self.branches_df.drop_duplicates(
-            subset = ['repo_name', 'name'],
+            subset = ['repo_name', 'branch_name'],
             keep = 'last'
         )
 
@@ -384,7 +383,7 @@ class CleanData:
         self.branches_df['branch_id'] = self.branches_df.apply(
             lambda r: generate_guid(
                 NAMESPACE_BRANCH,
-                f"{r['repo_name']}|{r['name']}"
+                f"{r['repo_name']}|{r['branch_name']}"
             ),
             axis = 1
         )
@@ -409,7 +408,7 @@ class CleanData:
 
         self.branches_df['ingested_at'] = pd.Timestamp.utcnow()
 
-        self.branches_df = self.branches_df[['branch_id', 'name', 'protected', 'commit_sha', 'repo_id', 'ingested_at']]
+        self.branches_df = self.branches_df[['branch_id', 'branch_name', 'protected', 'commit_sha', 'repo_id', 'ingested_at']]
 
         self._write_to_file('branches_clean', self.branches_df)
         self._log_issue(f'BRANCHES - Complete | {len(self.branches_df)} rows loaded.')
